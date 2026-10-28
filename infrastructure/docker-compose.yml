@@ -1,0 +1,83 @@
+# Uso (na raiz do repositório):
+#   docker compose -f infrastructure/docker-compose.yml up -d postgres redis      # só a infra, para `pnpm dev:api`
+#   docker compose -f infrastructure/docker-compose.yml --profile app up --build  # stack completa
+#   docker compose -f infrastructure/docker-compose.yml --profile ollama up -d    # embeddings locais (nomic-embed-text)
+
+name: torquespec
+
+x-api-env: &api-env
+  NODE_ENV: production
+  POSTGRES_URL: postgres://torque:torque@postgres:5432/torquespec
+  REDIS_URL: redis://redis:6379
+  STORAGE_DIR: /app/storage
+  OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+  JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no .env}
+  LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+  LLM_MODEL: ${LLM_MODEL:-gemini-2.5-flash}
+  LLM_API_KEY: ${LLM_API_KEY:-}
+  LLM_BASE_URL: ${LLM_BASE_URL:-}
+  EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-fake}
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+  EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: torque
+      POSTGRES_PASSWORD: torque
+      POSTGRES_DB: torquespec
+    ports: ["5432:5432"]
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U torque -d torquespec"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    volumes: [redis-data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  ollama:
+    image: ollama/ollama:latest
+    profiles: [ollama]
+    ports: ["11434:11434"]
+    volumes: [ollama-data:/root/.ollama]
+    # Baixa o modelo de embeddings na primeira subida
+    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 3 && ollama pull nomic-embed-text && wait"]
+
+  api:
+    build:
+      context: ..
+      dockerfile: services/api/Dockerfile
+    profiles: [app]
+    environment: *api-env
+    ports: ["3333:3333"]
+    volumes: [manuals-storage:/app/storage]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  worker:
+    build:
+      context: ..
+      dockerfile: services/api/Dockerfile
+    profiles: [app]
+    command: ["node", "dist/worker.js"]
+    environment: *api-env
+    volumes: [manuals-storage:/app/storage]
+    depends_on:
+      api: { condition: service_started } # a API aplica as migrations no boot
+
+volumes:
+  postgres-data:
+  redis-data:
+  ollama-data:
+  manuals-storage:

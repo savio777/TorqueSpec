@@ -1,2 +1,16 @@
+# Manuais reais (direitos autorais do fabricante) não são versionados
 *.pdf
+
+# Ambiente
 .env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Arquivos enviados pela API em desenvolvimento
+storage/
