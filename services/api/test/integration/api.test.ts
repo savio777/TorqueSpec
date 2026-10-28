@@ -1,5 +1,7 @@
 import type { AskResponse, Manual } from "@torquespec/shared-types";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { ManualsService } from "../../src/modules/manuals/manuals.service.js";
+import { MotorcyclesService } from "../../src/modules/motorcycles/motorcycles.service.js";
 import { bearer, createTestContext, login, multipart, sampleManualPdf, TEST_POSTGRES_URL, type TestContext } from "./helpers.js";
 
 describe.skipIf(!TEST_POSTGRES_URL)("API (integração com Postgres + pgvector)", () => {
@@ -224,6 +226,45 @@ describe.skipIf(!TEST_POSTGRES_URL)("API (integração com Postgres + pgvector)"
       expect(response.statusCode).toBe(409);
       expect(response.json().error.code).toBe("MANUAL_NOT_READY");
       await ctx.db.query("UPDATE manuals SET status = 'indexed' WHERE id = $1", [manual.id]);
+    });
+  });
+
+  describe("consistência", () => {
+    const brokenQueue = {
+      enqueue: async () => {
+        throw new Error("Redis indisponível");
+      },
+      close: async () => {},
+    };
+    const noStorage = { save: async () => ({ key: "", size: 0 }), read: async () => new Uint8Array(), readHeader: async () => new Uint8Array(), remove: async () => {} };
+
+    it("não deixa manual órfão quando a fila está fora do ar", async () => {
+      const service = new ManualsService(ctx.db, noStorage, brokenQueue);
+      const data = { motorcycleId, title: "x", originalFilename: "x.pdf", storageKey: "orfao.pdf", fileSizeBytes: 1, uploadedBy: null as unknown as string };
+      await expect(service.create(data)).rejects.toThrow("Redis indisponível");
+      const { rowCount } = await ctx.db.query("SELECT 1 FROM manuals WHERE storage_key = 'orfao.pdf'");
+      expect(rowCount).toBe(0);
+
+      await expect(service.reindex(manual.id)).rejects.toThrow("Redis indisponível");
+      expect((await service.get(manual.id)).status).toBe("failed");
+      await ctx.db.query("UPDATE manuals SET status = 'indexed', error = NULL WHERE id = $1", [manual.id]);
+    });
+
+    it("responde 404 se a moto sumir entre a validação e o cadastro do manual", async () => {
+      const service = new ManualsService(ctx.db, noStorage, brokenQueue);
+      const data = { motorcycleId: "00000000-0000-4000-8000-000000000000", title: "x", originalFilename: "x.pdf", storageKey: "k.pdf", fileSizeBytes: 1, uploadedBy: null as unknown as string };
+      await expect(service.create(data)).rejects.toMatchObject({ statusCode: 404 });
+    });
+
+    it("remove a moto com seus manuais e devolve as chaves dos arquivos", async () => {
+      const motorcycles = new MotorcyclesService(ctx.db);
+      const other = await motorcycles.create({ brand: "Honda", model: "CB 500F", year: 2023 });
+      await ctx.db.query(
+        "INSERT INTO manuals (motorcycle_id, title, original_filename, storage_key, file_size_bytes) VALUES ($1, 't', 't.pdf', 'cb.pdf', 1)",
+        [other.id],
+      );
+      expect(await motorcycles.remove(other.id)).toEqual(["cb.pdf"]);
+      await expect(motorcycles.get(other.id)).rejects.toMatchObject({ statusCode: 404 });
     });
   });
 

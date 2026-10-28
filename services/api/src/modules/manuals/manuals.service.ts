@@ -1,4 +1,5 @@
 import type { ListChunksQuery, ListManualsQuery, Manual, ManualChunk, ManualStatus } from "@torquespec/shared-types";
+import { isForeignKeyViolation } from "../../db/errors.js";
 import type { Queryable } from "../../db/pool.js";
 import { conflict, notFound } from "../../lib/errors.js";
 import type { IngestionQueue } from "../ingestion/queue.js";
@@ -88,13 +89,15 @@ export class ManualsService {
 
   /** Registra o manual como `pending` e agenda a ingestão em segundo plano. */
   async create(data: CreateManualData): Promise<Manual> {
-    const { rows } = await this.db.query<{ id: string }>(
-      `INSERT INTO manuals (motorcycle_id, title, original_filename, storage_key, file_size_bytes, uploaded_by)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-      [data.motorcycleId, data.title, data.originalFilename, data.storageKey, data.fileSizeBytes, data.uploadedBy],
-    );
+    const { rows } = await this.insert(data);
     const id = rows[0]!.id;
-    await this.queue.enqueue(id);
+    try {
+      await this.queue.enqueue(id);
+    } catch (error) {
+      // Sem job o manual nunca seria indexado; a rota apaga o PDF ao receber o erro.
+      await this.db.query("DELETE FROM manuals WHERE id = $1", [id]);
+      throw error;
+    }
     return this.get(id);
   }
 
@@ -108,7 +111,15 @@ export class ManualsService {
       await this.getRow(id); // 404 se não existir
       throw conflict("O manual já está sendo processado");
     }
-    await this.queue.enqueue(id);
+    try {
+      await this.queue.enqueue(id);
+    } catch (error) {
+      await this.db.query("UPDATE manuals SET status = 'failed', error = $2, updated_at = now() WHERE id = $1", [
+        id,
+        "Não foi possível agendar o reprocessamento; tente novamente",
+      ]);
+      throw error;
+    }
     return this.get(id);
   }
 
@@ -138,6 +149,19 @@ export class ManualsService {
       ),
     ]);
     return { items: rows, page, pageSize, total: count.rows[0]!.total };
+  }
+
+  private async insert(data: CreateManualData) {
+    try {
+      return await this.db.query<{ id: string }>(
+        `INSERT INTO manuals (motorcycle_id, title, original_filename, storage_key, file_size_bytes, uploaded_by)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [data.motorcycleId, data.title, data.originalFilename, data.storageKey, data.fileSizeBytes, data.uploadedBy],
+      );
+    } catch (error) {
+      if (isForeignKeyViolation(error)) throw notFound("Moto");
+      throw error;
+    }
   }
 
   private async getRow(id: string): Promise<ManualRow> {

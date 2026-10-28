@@ -68,7 +68,7 @@ try {
     log.info({ manualId }, "manual de exemplo indexado");
   }
 
-  log.info(`pronto! login: ${adminEmail} / ${adminPassword}`);
+  log.info({ email: adminEmail }, "seed concluído (senha: ADMIN_PASSWORD ou o padrão do README)");
 } finally {
   await db.end();
 }

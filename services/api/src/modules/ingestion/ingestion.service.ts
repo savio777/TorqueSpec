@@ -6,7 +6,6 @@ import { chunkPages, type ChunkOptions } from "./chunker.js";
 import { extractPdfPages } from "./pdf.js";
 
 const EMBEDDING_BATCH_SIZE = 32;
-const INSERT_BATCH_SIZE = 200;
 
 export class IngestionError extends Error {}
 
@@ -45,25 +44,20 @@ export class IngestionService {
         throw new IngestionError("PDF sem texto extraível (provavelmente escaneado; OCR ainda não é suportado)");
       }
 
-      const vectors: number[][] = [];
-      for (let i = 0; i < chunks.length; i += EMBEDDING_BATCH_SIZE) {
-        const batch = chunks.slice(i, i + EMBEDDING_BATCH_SIZE);
-        const embedded = await this.embeddings.embedDocuments(batch.map((chunk) => chunk.content));
-        for (const vector of embedded) {
-          if (vector.length !== this.embeddings.dimensions) {
-            throw new IngestionError(
-              `embedding com ${vector.length} dimensões; esperado ${this.embeddings.dimensions} (verifique EMBEDDING_MODEL)`,
-            );
-          }
-        }
-        vectors.push(...embedded);
-        await this.update(manualId, { progress: 10 + Math.floor((85 * vectors.length) / chunks.length) });
-      }
-
+      // Embeda e grava lote a lote numa única transação: a memória fica limitada a um lote
+      // e, até o COMMIT, as consultas continuam vendo os fragmentos antigos (reindex atômico).
       await withTransaction(this.db, async (tx) => {
         await tx.query("DELETE FROM manual_chunks WHERE manual_id = $1", [manualId]);
-        for (let i = 0; i < chunks.length; i += INSERT_BATCH_SIZE) {
-          const batch = chunks.slice(i, i + INSERT_BATCH_SIZE);
+        for (let i = 0; i < chunks.length; i += EMBEDDING_BATCH_SIZE) {
+          const batch = chunks.slice(i, i + EMBEDDING_BATCH_SIZE);
+          const vectors = await this.embeddings.embedDocuments(batch.map((chunk) => chunk.content));
+          for (const vector of vectors) {
+            if (vector.length !== this.embeddings.dimensions) {
+              throw new IngestionError(
+                `embedding com ${vector.length} dimensões; esperado ${this.embeddings.dimensions} (verifique EMBEDDING_MODEL)`,
+              );
+            }
+          }
           await tx.query(
             `INSERT INTO manual_chunks (manual_id, page_number, chunk_index, content, token_estimate, embedding)
              SELECT $1, page_number, chunk_index, content, token_estimate, embedding::vector
@@ -75,9 +69,12 @@ export class IngestionService {
               batch.map((chunk) => chunk.chunkIndex),
               batch.map((chunk) => chunk.content),
               batch.map((chunk) => chunk.tokenEstimate),
-              batch.map((_, offset) => toVectorLiteral(vectors[i + offset]!)),
+              vectors.map(toVectorLiteral),
             ],
           );
+          // Fora da transação, para o painel ver o progresso enquanto ela está aberta.
+          const done = Math.min(i + EMBEDDING_BATCH_SIZE, chunks.length);
+          await this.update(manualId, { progress: 10 + Math.floor((85 * done) / chunks.length) });
         }
         await tx.query(
           `UPDATE manuals

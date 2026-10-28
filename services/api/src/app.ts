@@ -42,7 +42,8 @@ export interface AppDeps {
 
 export async function buildApp(deps: AppDeps, options: Pick<FastifyServerOptions, "logger"> = {}) {
   const { env, db, storage, queue, llm, embeddings } = deps;
-  const app = Fastify({ ...options, trustProxy: true }).withTypeProvider<ZodTypeProvider>();
+  const serverOptions: FastifyServerOptions = { ...options, trustProxy: env.TRUST_PROXY };
+  const app = Fastify(serverOptions).withTypeProvider<ZodTypeProvider>();
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);

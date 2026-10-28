@@ -11,6 +11,13 @@ export const EnvSchema = z
     PORT: z.coerce.number().int().positive().default(3333),
     LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
     CORS_ORIGINS: z.string().default("*"),
+    // Proxies confiáveis para X-Forwarded-For (o rate limit usa o IP do cliente):
+    // "false" (padrão), IPs/CIDRs dos proxies separados por vírgula (ex.: "10.0.0.0/8,127.0.0.1")
+    // ou "true" — só quando a API nunca recebe conexões diretas de clientes.
+    TRUST_PROXY: z
+      .string()
+      .default("false")
+      .transform((value) => (value === "true" || value === "false" ? value === "true" : value.split(",").map((entry) => entry.trim()))),
 
     POSTGRES_URL: z.string().min(1).default("postgres://torque:torque@localhost:5432/torquespec"),
     REDIS_URL: z.string().min(1).default("redis://localhost:6379"),

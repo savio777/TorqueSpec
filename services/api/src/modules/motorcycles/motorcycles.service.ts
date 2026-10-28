@@ -1,6 +1,6 @@
 import type { CreateMotorcycleInput, Motorcycle, UpdateMotorcycleInput } from "@torquespec/shared-types";
 import { isUniqueViolation } from "../../db/errors.js";
-import type { Queryable } from "../../db/pool.js";
+import { withTransaction, type Db } from "../../db/pool.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
 
 interface MotorcycleRow {
@@ -28,7 +28,7 @@ const toMotorcycle = (row: MotorcycleRow): Motorcycle => ({
 const DUPLICATE = "Já existe uma moto com essa marca, modelo e ano";
 
 export class MotorcyclesService {
-  constructor(private readonly db: Queryable) {}
+  constructor(private readonly db: Db) {}
 
   async list(): Promise<Motorcycle[]> {
     const { rows } = await this.db.query<MotorcycleRow>(`${SELECT} ORDER BY m.brand, m.model, m.year DESC`);
@@ -72,12 +72,17 @@ export class MotorcyclesService {
 
   /** Remove a moto; os manuais e fragmentos vão junto (ON DELETE CASCADE). Devolve os arquivos a apagar. */
   async remove(id: string): Promise<string[]> {
-    const { rows } = await this.db.query<{ storage_key: string }>(
-      "SELECT storage_key FROM manuals WHERE motorcycle_id = $1",
-      [id],
-    );
-    const { rowCount } = await this.db.query("DELETE FROM motorcycles WHERE id = $1", [id]);
-    if (!rowCount) throw notFound("Moto");
-    return rows.map((row) => row.storage_key);
+    return withTransaction(this.db, async (tx) => {
+      // FOR UPDATE bloqueia uploads concorrentes (o INSERT do manual precisa de KEY SHARE na moto),
+      // então nenhum manual entra entre a coleta das chaves e o DELETE.
+      const { rowCount } = await tx.query("SELECT 1 FROM motorcycles WHERE id = $1 FOR UPDATE", [id]);
+      if (!rowCount) throw notFound("Moto");
+      const { rows } = await tx.query<{ storage_key: string }>(
+        "DELETE FROM manuals WHERE motorcycle_id = $1 RETURNING storage_key",
+        [id],
+      );
+      await tx.query("DELETE FROM motorcycles WHERE id = $1", [id]);
+      return rows.map((row) => row.storage_key);
+    });
   }
 }
