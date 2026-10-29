@@ -32,6 +32,8 @@ export const ErrorResponseSchema = z.object({
     code: z.string(),
     message: z.string(),
     details: z.unknown().optional(),
+    /** Só em NODE_ENV=development, nos erros 500: erro completo com stack e cadeia de `cause`. */
+    debug: z.unknown().optional(),
   }),
 });
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;

@@ -47,7 +47,7 @@ export async function buildApp(deps: AppDeps, options: Pick<FastifyServerOptions
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
-  registerErrorHandler(app);
+  registerErrorHandler(app, { exposeInternalErrors: env.NODE_ENV === "development" });
 
   await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(cors, {
