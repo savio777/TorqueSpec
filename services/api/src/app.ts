@@ -52,6 +52,8 @@ export async function buildApp(deps: AppDeps, options: Pick<FastifyServerOptions
   await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(cors, {
     origin: env.CORS_ORIGINS === "*" ? true : env.CORS_ORIGINS.split(",").map((origin) => origin.trim()),
+    // O padrão do @fastify/cors é só GET/HEAD/POST; o painel também edita (PATCH) e exclui (DELETE).
+    methods: ["GET", "HEAD", "POST", "PATCH", "DELETE"],
   });
   await app.register(rateLimit, { global: false });
   await app.register(multipart, {

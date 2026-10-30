@@ -24,7 +24,7 @@ O TorqueSpec permite perguntas em linguagem natural e entrega **respostas exatas
 | --- | --- |
 | **API** (`services/api`) | ✅ Auth, motos, upload/ingestão de PDFs, busca híbrida, perguntas com citação, histórico, métricas, OpenAPI |
 | Contratos (`packages/shared-types`) | ✅ Schemas Zod usados pela API (e prontos para web/mobile) |
-| Painel Web (`apps/web`) | 🔜 |
+| **Painel Web** (`apps/web`) | ✅ Login de admin, dashboard, CRUD de motos, upload/indexação/reindexação de manuais, inspeção de fragmentos e **chat RAG** para testar os manuais |
 | App Mobile (`apps/mobile`) | 🔜 |
 | AI Engine isolado (`services/ai-engine`) | 🔜 hoje é um módulo da API — veja o [ADR-001](docs/architecture.md#adr-001--monólito-modular-em-vez-de-microsserviços) |
 
@@ -95,6 +95,14 @@ pnpm dev:worker
 
 A documentação interativa (Swagger) fica em <http://localhost:3333/docs>.
 
+Painel administrativo (num terceiro terminal), em <http://localhost:3000> — entre com o admin do seed:
+
+```bash
+pnpm dev:web
+```
+
+O painel chama a API em `http://localhost:3333` por padrão; para outro endereço, copie [`apps/web/.env.example`](apps/web/.env.example) para `apps/web/.env.local` e ajuste `NEXT_PUBLIC_API_URL` (a origem do painel precisa estar em `CORS_ORIGINS` da API).
+
 Stack completa em containers (API + worker + Postgres + Redis):
 
 ```bash
@@ -121,6 +129,20 @@ curl -s -X POST localhost:3333/v1/manuals/$MANUAL_ID/ask \
   "latencyMs": 912
 }
 ```
+
+---
+
+## 🖥️ Painel administrativo (`apps/web`)
+
+Next.js 16 (App Router) + Tailwind CSS 4 + TanStack Query, tipado com os contratos de `@torquespec/shared-types`. Acesso restrito a usuários `admin`.
+
+| Tela | O que faz |
+| --- | --- |
+| **Dashboard** | Motos, manuais por status, vetores no pgvector, perguntas e consumo da LLM nos últimos 30 dias |
+| **Modelos de Motos** | Cadastro, edição e exclusão (com aviso de remoção em cascata dos manuais) |
+| **Manuais (PDF)** | Upload com arrastar-e-soltar e barra de envio, acompanhamento do progresso da indexação (polling), filtros por moto/status, reindexação e exclusão |
+| **Fragmentos** | Inspeção dos chunks indexados de um manual, filtráveis pela página do PDF |
+| **Chat RAG** | Perguntas a um manual indexado com chips de sugestão; mostra a resposta com as páginas citadas (link para o fragmento), trecho e score de cada citação, se a resposta está fundamentada, modelo, latência e tokens; carrega o histórico de perguntas do manual |
 
 ---
 
@@ -174,7 +196,7 @@ TEST_POSTGRES_URL=postgres://torque:torque@localhost:5432/torquespec_test pnpm t
 ```text
 TorqueSpec/
 ├── apps/
-│   ├── web/            # Painel Administrativo em Next.js (em breve)
+│   ├── web/            # Painel administrativo em Next.js (CRUDs + chat RAG)
 │   └── mobile/         # App Mobile em React Native/Expo (em breve)
 ├── services/
 │   └── api/            # core + auth + RAG (modular monolith)

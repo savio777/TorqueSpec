@@ -278,6 +278,21 @@ describe.skipIf(!TEST_POSTGRES_URL)("API (integração com Postgres + pgvector)"
       expect(Object.keys(openapi.json().paths)).toContain("/v1/manuals/{id}/ask");
     });
 
+    it("libera PATCH e DELETE no preflight de CORS (painel web)", async () => {
+      const preflight = await ctx.app.inject({
+        method: "OPTIONS",
+        url: "/v1/motorcycles/00000000-0000-0000-0000-000000000000",
+        headers: {
+          origin: "http://localhost:3000",
+          "access-control-request-method": "DELETE",
+          "access-control-request-headers": "authorization",
+        },
+      });
+      expect(preflight.statusCode).toBe(204);
+      const methods = String(preflight.headers["access-control-allow-methods"]).split(",").map((method) => method.trim());
+      expect(methods).toEqual(expect.arrayContaining(["PATCH", "DELETE"]));
+    });
+
     it("remove manual (cascata nos fragmentos)", async () => {
       const removed = await ctx.app.inject({
         method: "DELETE",
