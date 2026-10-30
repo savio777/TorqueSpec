@@ -14,3 +14,6 @@ coverage/
 
 # Arquivos enviados pela API em desenvolvimento
 storage/
+
+# Snapshot do Redis local
+dump.rdb
