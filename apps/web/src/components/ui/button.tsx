@@ -4,10 +4,10 @@ import { Spinner } from "./spinner";
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 
 const VARIANTS: Record<Variant, string> = {
-  primary: "bg-brand text-white hover:bg-brand-strong",
+  primary: "bg-brand-solid text-white hover:bg-brand-solid-hover",
   secondary: "border border-border bg-surface-2 text-fg hover:border-subtle",
   ghost: "text-muted hover:bg-surface-2 hover:text-fg",
-  danger: "bg-danger/90 text-white hover:bg-danger",
+  danger: "bg-red-700 text-white hover:bg-red-800",
 };
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

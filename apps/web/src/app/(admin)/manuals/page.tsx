@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, MessagesSquare, RefreshCw, Search, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { ManualUpload } from "@/components/manual-upload";
 import { useToast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,13 @@ function ManualsContent() {
     // Enquanto houver manual na fila/processando, acompanha o progresso do worker.
     refetchInterval: (query) => (query.state.data?.items.some((manual) => isInProgress(manual.status)) ? 2000 : false),
   });
+
+  // Página além do fim (ex.: excluiu o único manual da última página): volta para a última que tem itens.
+  const lastPage = manuals.data ? Math.max(1, Math.ceil(manuals.data.total / PAGE_SIZE)) : page;
+  useEffect(() => {
+    if (page > lastPage) setParams({ page: lastPage > 1 ? String(lastPage) : undefined });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setParams muda a cada render; só reage à página
+  }, [page, lastPage]);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["manuals"] });

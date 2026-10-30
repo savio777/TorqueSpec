@@ -113,7 +113,12 @@ export function ManualUpload({ motorcycles }: { motorcycles: Motorcycle[] }) {
               <span className="text-xs text-muted">.pdf, máx. {MAX_UPLOAD_MB} MB</span>
             </button>
           )}
-          <input ref={inputRef} type="file" accept="application/pdf,.pdf" hidden onChange={(e) => pick(e.target.files?.[0])} />
+          <input ref={inputRef} type="file" accept="application/pdf,.pdf" hidden onChange={(e) => {
+              pick(e.target.files?.[0]);
+              // Limpa a seleção para que escolher o mesmo PDF de novo dispare `change`.
+              e.target.value = "";
+            }}
+          />
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">

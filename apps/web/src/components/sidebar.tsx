@@ -33,7 +33,7 @@ export function Sidebar() {
             href={href}
             aria-current={isActive(href) ? "page" : undefined}
             className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm whitespace-nowrap transition-colors ${
-              isActive(href) ? "bg-brand text-white" : "text-muted hover:bg-surface-2 hover:text-fg"
+              isActive(href) ? "bg-brand-solid text-white" : "text-muted hover:bg-surface-2 hover:text-fg"
             }`}
           >
             <Icon aria-hidden className="size-4" />

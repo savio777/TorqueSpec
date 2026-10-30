@@ -150,6 +150,15 @@ export const api = {
   manuals: {
     list: (query: { page?: number; pageSize?: number; motorcycleId?: string; status?: ManualStatus } = {}) =>
       request<Paginated<Manual>>("GET", "/v1/manuals", { query }),
+    /** Percorre todas as páginas (a API limita `pageSize` a 100). */
+    listAll: async (query: { motorcycleId?: string; status?: ManualStatus } = {}) => {
+      const items: Manual[] = [];
+      for (let page = 1; ; page++) {
+        const result = await request<Paginated<Manual>>("GET", "/v1/manuals", { query: { ...query, page, pageSize: 100 } });
+        items.push(...result.items);
+        if (result.items.length === 0 || items.length >= result.total) return items;
+      }
+    },
     get: (id: string) => request<Manual>("GET", `/v1/manuals/${id}`),
     upload: uploadManual,
     reindex: (id: string) => request<Manual>("POST", `/v1/manuals/${id}/reindex`),

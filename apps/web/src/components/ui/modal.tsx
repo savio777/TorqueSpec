@@ -1,12 +1,13 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { Button } from "./button";
 
 /** Diálogo modal nativo (`<dialog>`): foco preso, Esc fecha e o fundo fica inerte. */
 export function Modal({ open, onClose, title, children, footer }: { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     const dialog = ref.current;
@@ -18,12 +19,15 @@ export function Modal({ open, onClose, title, children, footer }: { open: boolea
   return (
     <dialog
       ref={ref}
+      aria-labelledby={titleId}
       onClose={onClose}
       onClick={(event) => event.target === ref.current && onClose()}
       className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-xl border border-border bg-surface p-0 text-fg backdrop:bg-black/60"
     >
       <header className="flex items-center justify-between border-b border-border px-5 py-3.5">
-        <h2 className="text-sm font-semibold">{title}</h2>
+        <h2 id={titleId} className="text-sm font-semibold">
+          {title}
+        </h2>
         <button type="button" onClick={onClose} aria-label="Fechar" className="rounded p-1 text-muted hover:text-fg">
           <X className="size-4" />
         </button>

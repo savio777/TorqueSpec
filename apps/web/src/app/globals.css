@@ -17,8 +17,10 @@
 
   /* Marca */
   --color-brand: #f97316;
-  --color-brand-strong: #ea580c;
   --color-brand-soft: rgb(249 115 22 / 0.14);
+  /* Fundo de controles com texto branco: contraste >= 4,5:1 (o laranja vivo fica para texto e acentos) */
+  --color-brand-solid: #c2410c;
+  --color-brand-solid-hover: #9a3412;
 
   /* Status */
   --color-ok: #22c55e;

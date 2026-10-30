@@ -76,7 +76,7 @@ function ManualDetail() {
           data.status === "indexed" && (
             <Link
               href={`/chat?manualId=${data.id}`}
-              className="inline-flex h-10 items-center gap-2 rounded-lg bg-brand px-4 text-sm font-medium text-white hover:bg-brand-strong"
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-brand-solid px-4 text-sm font-medium text-white hover:bg-brand-solid-hover"
             >
               <MessagesSquare className="size-4" /> Testar no chat
             </Link>

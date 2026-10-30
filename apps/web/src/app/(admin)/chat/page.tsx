@@ -11,7 +11,7 @@ import { Alert, EmptyState, PageHeader } from "@/components/ui/card";
 import { Select } from "@/components/ui/field";
 import { PageLoader } from "@/components/ui/spinner";
 import { api, errorMessage } from "@/lib/api";
-import { formatNumber, motorcycleLabel } from "@/lib/format";
+import { formatNumber, motorcycleLabel, STATUS_LABEL } from "@/lib/format";
 
 const HISTORY_SIZE = 20;
 const MAX_QUESTION = 1000;
@@ -23,13 +23,22 @@ function Chat() {
   const queryClient = useQueryClient();
 
   const manuals = useQuery({
-    queryKey: ["manuals", { status: "indexed", page: 1, pageSize: 100 }],
-    queryFn: () => api.manuals.list({ status: "indexed", pageSize: 100 }),
+    queryKey: ["manuals", "all", { status: "indexed" }],
+    queryFn: () => api.manuals.listAll({ status: "indexed" }),
   });
   const suggestions = useQuery({ queryKey: ["suggestions"], queryFn: api.rag.suggestions, staleTime: Infinity });
 
-  const manualId = searchParams.get("manualId") ?? manuals.data?.items[0]?.id;
-  const manual = manuals.data?.items.find((item) => item.id === manualId);
+  const urlManualId = searchParams.get("manualId");
+  const manualId = urlManualId ?? manuals.data?.[0]?.id;
+  // O manual da URL é buscado pelo ID: funciona mesmo se ele não estiver na lista (ex.: ainda indexando).
+  const urlManual = useQuery({
+    queryKey: ["manuals", urlManualId],
+    queryFn: () => api.manuals.get(urlManualId!),
+    enabled: !!urlManualId,
+  });
+  const selected = urlManualId ? urlManual.data : manuals.data?.[0];
+  const manual = selected?.status === "indexed" ? selected : undefined;
+  const options = manual && !manuals.data?.some((item) => item.id === manual.id) ? [manual, ...(manuals.data ?? [])] : (manuals.data ?? []);
 
   const history = useQuery({
     queryKey: ["queries", manualId],
@@ -103,7 +112,7 @@ function Chat() {
 
   if (manuals.isPending) return <PageLoader />;
   if (manuals.isError) return <Alert>{errorMessage(manuals.error)}</Alert>;
-  if (manuals.data.items.length === 0) {
+  if (manuals.data.length === 0 && !urlManualId) {
     return (
       <>
         <PageHeader title="Chat RAG" description="Teste as respostas dos manuais indexados." />
@@ -134,8 +143,8 @@ function Chat() {
               value={manual?.id ?? ""}
               onChange={(e) => router.replace(`${pathname}?manualId=${e.target.value}`)}
             >
-              {!manual && <option value="">Manual indisponível — selecione outro</option>}
-              {manuals.data.items.map((item) => (
+              {!manual && <option value="">{urlManual.isPending ? "Carregando…" : "Manual indisponível — selecione outro"}</option>}
+              {options.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.title} · {motorcycleLabel(item.motorcycle)}
                 </option>
@@ -162,8 +171,13 @@ function Chat() {
         )}
 
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-5 md:px-6" aria-live="polite">
-          {!manual ? (
-            <EmptyState title="Manual não encontrado ou não indexado" description="Selecione um manual indexado acima." />
+          {urlManual.isLoading ? (
+            <PageLoader />
+          ) : !manual ? (
+            <EmptyState
+              title={selected ? `"${selected.title}" ainda não está indexado` : "Manual não encontrado"}
+              description={selected ? `Status atual: ${STATUS_LABEL[selected.status]}. Selecione um manual indexado acima.` : "Selecione um manual indexado acima."}
+            />
           ) : history.isPending && session.length === 0 ? (
             <PageLoader label="Carregando histórico…" />
           ) : messages.length === 0 ? (
